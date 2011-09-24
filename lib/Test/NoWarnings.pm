@@ -27,9 +27,43 @@ my @WARNINGS = ();
 $SIG{__WARN__} = make_catcher(\@WARNINGS);
 
 sub import {
+	my $caller = caller;
+
+	_replace_done_testing($caller);
+
 	$do_end_test = 1;
 	goto &Exporter::import;
 }
+
+
+# Replace the user's done_testing with our own wrapper which
+# triggers our check.
+sub _replace_done_testing {
+    my $caller = shift;
+
+    my $callers_done_testing = $caller.'::done_testing';
+
+    no strict 'refs';
+
+    return unless defined &{$callers_done_testing};
+
+    my $original = \&{$callers_done_testing};
+
+    my $done_testing = sub {
+        had_no_warnings() if $do_end_test;
+
+        # Don't run twice
+        $do_end_test = 0;
+
+        goto $original;
+    };
+
+    no warnings 'redefine';
+    *{$callers_done_testing} = $done_testing;
+
+    return;
+}
+
 
 # the END block must be after the "use Test::Builder" to make sure it runs
 # before Test::Builder's end block
@@ -139,6 +173,11 @@ change to
   use Test::More tests => x + 1;
   use Test::NoWarnings;
 
+For scripts using done_testing, load Test::More first.
+
+  use Test::More;
+  use Test::NoWarnings;
+
 =head1 DESCRIPTION
 
 In general, your tests shouldn't produce warnings. This modules causes any
@@ -152,8 +191,9 @@ If some of your tests B<are supposed to> produce warnings then you should be
 capturing and checking them with L<Test::Warn>, that way L<Test::NoWarnings>
 will not see them and so not complain.
 
-The test is run by an END block in Test::NoWarnings. It will not be run when
-any forked children exit.
+The test is run by an END block in Test::NoWarnings, or just before
+C<done_testing>, whichever comes first.  It will not be run when any
+forked children exit.
 
 =head1 USAGE
 
