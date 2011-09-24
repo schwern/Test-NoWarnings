@@ -55,6 +55,11 @@ sub _replace_done_testing {
         # Don't run twice
         $do_end_test = 0;
 
+        # If the user supplied a number of tests, add one for our own.
+        if( @_ ) {
+            my $num = shift;
+            unshift @_, $num + 1;
+        }
         goto $original;
     };
 
